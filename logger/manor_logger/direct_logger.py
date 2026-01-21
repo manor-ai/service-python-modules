@@ -17,12 +17,17 @@ except ImportError:
     tracer = None
     DDTRACE_AVAILABLE = False
 
-DD_API_KEY = os.getenv("DD_API_KEY", "24b9e19b6d5bca4210cd6b077730e2e4")
+DD_API_KEY = os.getenv("DD_API_KEY")
 DD_SITE = os.getenv("DD_SITE", "us5.datadoghq.com")
-DD_INTAKE_URL = f"https://http-intake.logs.{DD_SITE}/v1/input/{DD_API_KEY}"
+DD_INTAKE_URL = (
+    f"https://http-intake.logs.{DD_SITE}/v1/input/{DD_API_KEY}"
+    if DD_API_KEY
+    else None
+)
 
 DEFAULT_SERVICE = os.getenv("DD_SERVICE", "manor-service-task")
 DEFAULT_ENV = os.getenv("DD_ENV", os.getenv("ENVIRONMENT", "preprod"))
+_WARNED_MISSING_KEY = False
 
 
 class DirectDatadogLogger:
@@ -35,9 +40,15 @@ class DirectDatadogLogger:
         self.service = service or DEFAULT_SERVICE
         self.env = env or DEFAULT_ENV
         self.intake_url = intake_url or DD_INTAKE_URL
-        self.client = httpx.Client(timeout=5.0)
+        self.client = httpx.Client(timeout=5.0) if self.intake_url else None
 
     def log(self, message: str, level: str = "info", **extra_fields):
+        global _WARNED_MISSING_KEY
+        if not DD_API_KEY or not self.intake_url or not self.client:
+            if not _WARNED_MISSING_KEY:
+                print("[DD ERROR] DD_API_KEY not set - skipping log delivery")
+                _WARNED_MISSING_KEY = True
+            return
         try:
             tags = f"service:{self.service},env:{self.env},level:{level}"
             if extra_fields:
