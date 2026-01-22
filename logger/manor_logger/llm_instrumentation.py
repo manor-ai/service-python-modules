@@ -51,8 +51,9 @@ def instrument_llm_call(
                 return await func(*args, **kwargs)
 
             start_time = time.monotonic()
+            llm_service = os.getenv("LLM_DD_SERVICE", os.getenv("DD_SERVICE", "llm"))
             if DDTRACE_AVAILABLE and tracer:
-                with tracer.trace(operation_name, service="manor-llm") as span:
+                with tracer.trace(operation_name, service=llm_service) as span:
                     span.set_tag("span.kind", "llm")
                     span.set_tag("llm.operation", operation_name)
 
@@ -113,8 +114,9 @@ def instrument_llm_call(
                 return func(*args, **kwargs)
 
             start_time = time.monotonic()
+            llm_service = os.getenv("LLM_DD_SERVICE", os.getenv("DD_SERVICE", "llm"))
             if DDTRACE_AVAILABLE and tracer:
-                with tracer.trace(operation_name, service="manor-llm") as span:
+                with tracer.trace(operation_name, service=llm_service) as span:
                     span.set_tag("span.kind", "llm")
                     span.set_tag("llm.operation", operation_name)
 
@@ -219,8 +221,9 @@ def trace_llm_pipeline(
 
             start_time = time.monotonic()
 
+            llm_service = os.getenv("LLM_DD_SERVICE", os.getenv("DD_SERVICE", "llm"))
             if DDTRACE_AVAILABLE and tracer:
-                with tracer.trace(f"llm.pipeline.{pipeline_name}", service="manor-llm") as span:
+                with tracer.trace(f"llm.pipeline.{pipeline_name}", service=llm_service) as span:
                     span.set_tag("span.kind", "pipeline")
                     span.set_tag("pipeline.name", pipeline_name)
 
@@ -271,8 +274,9 @@ def trace_llm_pipeline(
 
             start_time = time.monotonic()
 
+            llm_service = os.getenv("LLM_DD_SERVICE", os.getenv("DD_SERVICE", "llm"))
             if DDTRACE_AVAILABLE and tracer:
-                with tracer.trace(f"llm.pipeline.{pipeline_name}", service="manor-llm") as span:
+                with tracer.trace(f"llm.pipeline.{pipeline_name}", service=llm_service) as span:
                     span.set_tag("span.kind", "pipeline")
                     span.set_tag("pipeline.name", pipeline_name)
 

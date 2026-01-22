@@ -38,8 +38,8 @@ log_level = getattr(logging, LOG_LEVEL, logging.INFO)
 
 DD_API_KEY = os.getenv("DD_API_KEY")
 DD_SITE = os.getenv("DD_SITE", "us5.datadoghq.com")
-DD_SERVICE = os.getenv("DD_SERVICE", "manor-service")
-DD_ENV = os.getenv("DD_ENV", os.getenv("ENVIRONMENT", "test"))
+DD_SERVICE = os.getenv("DD_SERVICE", "app")
+DD_ENV = os.getenv("DD_ENV", os.getenv("ENVIRONMENT", "dev"))
 
 DD_INTAKE_URLS = {
     "datadoghq.com": "https://http-intake.logs.datadoghq.com",
@@ -252,20 +252,32 @@ class HealthEndpointFilter(logging.Filter):
         return "/health" not in message and '"/health' not in message
 
 
-def configure_logging() -> structlog.stdlib.BoundLogger:
+def configure_logging(
+    *,
+    service: str | None = None,
+    env: str | None = None,
+    api_key: str | None = None,
+    site: str | None = None,
+) -> structlog.stdlib.BoundLogger:
     global _LOGGING_CONFIGURED
     if _LOGGING_CONFIGURED:
         return structlog.get_logger()
 
+    resolved_api_key = api_key or DD_API_KEY
+    resolved_site = site or DD_SITE
+    resolved_service = service or DD_SERVICE
+    resolved_env = env or DD_ENV
+    resolved_intake_url = DD_INTAKE_URLS.get(resolved_site, DD_INTAKE_URLS["datadoghq.com"])
+
     handlers: List[logging.Handler] = [logging.StreamHandler(sys.stdout)]
 
-    if DD_API_KEY and HTTPX_AVAILABLE:
+    if resolved_api_key and HTTPX_AVAILABLE:
         try:
             dd_handler = BatchingDatadogHandler(
-                api_key=DD_API_KEY,
-                intake_url=DD_INTAKE_URL,
-                service=DD_SERVICE,
-                env=DD_ENV,
+                api_key=resolved_api_key,
+                intake_url=resolved_intake_url,
+                service=resolved_service,
+                env=resolved_env,
                 batch_size=10,
                 flush_interval=1.0,
             )
@@ -275,13 +287,14 @@ def configure_logging() -> structlog.stdlib.BoundLogger:
             atexit.register(dd_handler.close)
 
             sys.stderr.write(
-                f"Datadog: initialized (service={DD_SERVICE}, env={DD_ENV}, batching=10 logs/request)\n"
+                "Datadog: initialized (service="
+                f"{resolved_service}, env={resolved_env}, batching=10 logs/request)\n"
             )
             sys.stderr.flush()
         except Exception as e:
             sys.stderr.write(f"Datadog: init failed: {e}\n")
             sys.stderr.flush()
-    elif not DD_API_KEY:
+    elif not resolved_api_key:
         sys.stderr.write("Datadog: DD_API_KEY not set\n")
         sys.stderr.flush()
     elif not HTTPX_AVAILABLE:
