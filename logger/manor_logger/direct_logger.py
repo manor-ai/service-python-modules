@@ -25,8 +25,8 @@ DD_INTAKE_URL = (
     else None
 )
 
-DEFAULT_SERVICE = os.getenv("DD_SERVICE", "manor-service-task")
-DEFAULT_ENV = os.getenv("DD_ENV", os.getenv("ENVIRONMENT", "preprod"))
+DEFAULT_SERVICE = os.getenv("DD_SERVICE", "app")
+DEFAULT_ENV = os.getenv("DD_ENV", os.getenv("ENVIRONMENT", "dev"))
 _WARNED_MISSING_KEY = False
 
 
@@ -36,15 +36,23 @@ class DirectDatadogLogger:
         service: str | None = None,
         env: str | None = None,
         intake_url: str | None = None,
+        api_key: str | None = None,
+        site: str | None = None,
     ) -> None:
+        resolved_api_key = api_key or DD_API_KEY
+        resolved_site = site or DD_SITE
         self.service = service or DEFAULT_SERVICE
         self.env = env or DEFAULT_ENV
-        self.intake_url = intake_url or DD_INTAKE_URL
+        self.intake_url = intake_url or (
+            f"https://http-intake.logs.{resolved_site}/v1/input/{resolved_api_key}"
+            if resolved_api_key
+            else None
+        )
         self.client = httpx.Client(timeout=5.0) if self.intake_url else None
 
     def log(self, message: str, level: str = "info", **extra_fields):
         global _WARNED_MISSING_KEY
-        if not DD_API_KEY or not self.intake_url or not self.client:
+        if not self.intake_url or not self.client:
             if not _WARNED_MISSING_KEY:
                 print("[DD ERROR] DD_API_KEY not set - skipping log delivery")
                 _WARNED_MISSING_KEY = True
