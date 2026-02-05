@@ -8,6 +8,7 @@ on:
 
 env:
   MAJOR_VERSION: "1"
+  MINOR_VERSION: "1"
 
 permissions:
   contents: write
@@ -50,8 +51,7 @@ jobs:
       - name: Generate version
         id: version
         run: |
-          TS="$(date -u +%Y%m%d%H%M)"
-          VERSION="${MAJOR_VERSION}.${TS}.${{ github.run_number }}"
+          VERSION="${MAJOR_VERSION}.${MINOR_VERSION}.${{ github.run_number }}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "📦 Version: $VERSION"
 
@@ -116,14 +116,26 @@ jobs:
     needs: [test, build-and-release]
     if: success()
     steps:
-      - env:
+      - name: Send Slack notification
+        env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           VERSION="${{ needs.build-and-release.outputs.version }}"
-          MSG="✅ manor package released\nVersion: ${VERSION}\nRelease: https://github.com/${{ github.repository }}/releases/tag/v${VERSION}"
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\"$MSG\"}" \
-            "$SLACK_WEBHOOK_URL" || true
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/v${VERSION}"
+          
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-type: application/json' \
+            --data "{
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \"✅ *manor* package released\\n• Version: \`${VERSION}\`\\n• <${RELEASE_URL}|View Release>\"
+                  }
+                }
+              ]
+            }" || true
 
   notify_failure:
     name: 💬 Notify Failure
@@ -131,10 +143,22 @@ jobs:
     needs: [test, build-and-release]
     if: failure()
     steps:
-      - env:
+      - name: Send Slack notification
+        env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          MSG="❌ manor package release failed\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\"$MSG\"}" \
-            "$SLACK_WEBHOOK_URL" || true
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-type: application/json' \
+            --data "{
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \"❌ *manor* package release failed\\n• <${WORKFLOW_URL}|View Workflow>\"
+                  }
+                }
+              ]
+            }" || true
