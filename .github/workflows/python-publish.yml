@@ -1,70 +1,140 @@
-# This workflow will upload a Python Package to PyPI when a release is created
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python#publishing-to-package-registries
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-name: Upload Python Package
+name: Publish Python Package
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  MAJOR_VERSION: "1"
 
 permissions:
-  contents: read
+  contents: write
+  packages: write
 
 jobs:
-  release-build:
+  test:
+    name: 🧪 Tests
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-      - name: Build release distributions
-        run: |
-          # NOTE: put your own distribution build steps here.
-          python -m pip install build
-          python -m build
+      - name: Set up Python
+        run: uv python install 3.12
 
-      - name: Upload distributions
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-dists
-          path: dist/
+      - name: Install dependencies
+        run: uv sync --all-groups
 
-  pypi-publish:
+      - name: Run tests
+        run: uv run pytest -v
+
+  build-and-release:
+    name: 📦 Build & Release
     runs-on: ubuntu-latest
-    needs:
-      - release-build
-    permissions:
-      # IMPORTANT: this permission is mandatory for trusted publishing
-      id-token: write
-
-    # Dedicated environments with protections for publishing are strongly recommended.
-    # For more information, see: https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
-    environment:
-      name: pypi
-      # OPTIONAL: uncomment and update to include your PyPI project URL in the deployment status:
-      # url: https://pypi.org/p/YOURPROJECT
-      #
-      # ALTERNATIVE: if your GitHub Release name is the PyPI project version string
-      # ALTERNATIVE: exactly, uncomment the following line instead:
-      # url: https://pypi.org/project/YOURPROJECT/${{ github.event.release.name }}
-
+    needs: test
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Retrieve release distributions
-        uses: actions/download-artifact@v4
-        with:
-          name: release-dists
-          path: dist/
+      - uses: actions/checkout@v4
 
-      - name: Publish release distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Generate version
+        id: version
+        run: |
+          TS="$(date -u +%Y%m%d%H%M)"
+          VERSION="${MAJOR_VERSION}.${TS}.${{ github.run_number }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "📦 Version: $VERSION"
+
+      - name: Update version in files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/version = \".*\"/version = \"$VERSION\"/" pyproject.toml
+          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" manor/__init__.py
+          echo "✅ Updated version to: $VERSION"
+
+      - name: Build package
+        run: uv build
+
+      - name: List built artifacts
+        run: ls -la dist/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Create release with artifacts
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes "## Installation
+
+          \`\`\`bash
+          uv add manor --find-links https://github.com/manor-tech/service-python-modules/releases/download/v${VERSION}/
+          \`\`\`
+
+          Or add to pyproject.toml:
+
+          \`\`\`toml
+          [tool.uv]
+          find-links = [\"https://github.com/manor-tech/service-python-modules/releases/download/v${VERSION}/\"]
+
+          [project]
+          dependencies = [\"manor\"]
+          \`\`\`
+          " \
+            dist/*
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "## 📦 Package Released" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release:** https://github.com/${{ github.repository }}/releases/tag/v${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Install with uv" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "uv add manor --find-links https://github.com/manor-tech/service-python-modules/releases/download/v${VERSION}/" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  notify_success:
+    name: 💬 Notify Success
+    runs-on: ubuntu-latest
+    needs: [test, build-and-release]
+    if: success()
+    steps:
+      - env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          VERSION="${{ needs.build-and-release.outputs.version }}"
+          MSG="✅ manor package released\nVersion: ${VERSION}\nRelease: https://github.com/${{ github.repository }}/releases/tag/v${VERSION}"
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"$MSG\"}" \
+            "$SLACK_WEBHOOK_URL" || true
+
+  notify_failure:
+    name: 💬 Notify Failure
+    runs-on: ubuntu-latest
+    needs: [test, build-and-release]
+    if: failure()
+    steps:
+      - env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          MSG="❌ manor package release failed\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"$MSG\"}" \
+            "$SLACK_WEBHOOK_URL" || true
