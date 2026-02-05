@@ -1,0 +1,41 @@
+[project]
+name = "manor"
+version = "0.1.0"
+description = "Shared Python modules for Manor services"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ddtrace>=2.0.0",
+    "httpx>=0.27.0",
+    "structlog>=24.1.0",
+    "posthog>=3.0.0",
+    "PyJWT>=2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["manor"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
