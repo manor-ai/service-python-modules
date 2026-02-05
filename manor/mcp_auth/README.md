@@ -13,7 +13,7 @@ This module provides secure authentication between Manor services and MCP server
 ## Installation
 
 ```bash
-pip install manor
+uv add manor --find-links https://github.com/manor-tech/service-python-modules/releases/latest/download/
 ```
 
 ## Quick Start

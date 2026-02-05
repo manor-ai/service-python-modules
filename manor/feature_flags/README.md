@@ -14,7 +14,7 @@ Feature flags module using PostHog for Manor services.
 ## Installation
 
 ```bash
-pip install manor
+uv add manor --find-links https://github.com/manor-tech/service-python-modules/releases/latest/download/
 ```
 
 ## Quick Start

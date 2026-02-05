@@ -4,46 +4,51 @@ Shared Python modules for Manor services.
 
 ## Installation
 
-### From GitHub Packages (Production)
-
-Add to your `requirements.txt`:
-
-```
-manor @ https://github.com/manor-tech/service-python-modules/releases/download/v0.1.0/manor-0.1.0-py3-none-any.whl
-```
-
-Or install directly with pip:
+### With uv (recommended)
 
 ```bash
-pip install manor --index-url https://pypi.pkg.github.com/manor-tech/ --extra-index-url https://pypi.org/simple/
+# Install latest version
+uv add manor --find-links https://github.com/manor-tech/service-python-modules/releases/latest/download/
 ```
 
-### Authentication for GitHub Packages
+Or add to your `pyproject.toml`:
 
-For local development, configure pip to authenticate with GitHub:
+```toml
+[tool.uv]
+find-links = ["https://github.com/manor-tech/service-python-modules/releases/latest/download/"]
+
+[project]
+dependencies = ["manor"]
+```
+
+### Pin to specific version
 
 ```bash
-# ~/.pip/pip.conf (Linux/macOS) or %APPDATA%\pip\pip.ini (Windows)
-[global]
-extra-index-url = https://__token__:${GITHUB_TOKEN}@pypi.pkg.github.com/manor-tech/
+# Install specific version
+uv add manor==1.202502041530.42 --find-links https://github.com/manor-tech/service-python-modules/releases/download/v1.202502041530.42/
 ```
 
-For Docker builds, use build args:
+Or in `pyproject.toml`:
 
-```dockerfile
-ARG GITHUB_TOKEN
-RUN pip install manor --index-url https://__token__:${GITHUB_TOKEN}@pypi.pkg.github.com/manor-tech/ --extra-index-url https://pypi.org/simple/
+```toml
+[tool.uv]
+find-links = ["https://github.com/manor-tech/service-python-modules/releases/download/v1.202502041530.42/"]
+
+[project]
+dependencies = ["manor==1.202502041530.42"]
 ```
 
 ### Local Development
 
 ```bash
-# Clone the repository
 git clone https://github.com/manor-tech/service-python-modules.git
 cd service-python-modules
 
-# Install in editable mode
-pip install -e ".[dev]"
+# Install with uv
+uv sync --all-groups
+
+# Run tests
+uv run pytest
 ```
 
 ## Modules
@@ -53,75 +58,101 @@ pip install -e ".[dev]"
 Structured logging with Datadog integration.
 
 ```python
-from manor.logger import configure_logging, logger, log_datadog
+from manor.logger import logger
 
-# Configure structured logging
-configure_logging(service_name="my-service")
-
-# Use structured logger
+# Structured logging
 logger.info("Processing request", user_id="123", action="login")
-
-# Direct Datadog logging (for workers/Celery)
-log_datadog("Task completed", level="info", task_id="abc")
+logger.error("Payment failed", order_id="456", error="insufficient_funds")
 ```
+
+See [manor/logger/README.md](manor/logger/README.md) for full documentation.
 
 ### Feature Flags (`manor.feature_flags`)
 
-LaunchDarkly integration for feature flags.
+PostHog integration for feature flags.
 
 ```python
-from manor.feature_flags import init_client, get_flag, shutdown_client
+from manor.feature_flags import is_enabled, get_flag
 
-# Initialize at app startup
-init_client()
-
-# Check feature flags
-if get_flag("new-checkout-flow", user_key="user-123"):
-    # New feature enabled for this user
+# Simple boolean flag
+if is_enabled("new-checkout"):
     use_new_checkout()
-else:
-    use_legacy_checkout()
 
-# With user attributes for targeting
-enabled = get_flag(
-    "premium-feature",
-    user_key="user-123",
-    user_attributes={"plan": "premium", "country": "BR"}
-)
+# With user targeting
+if is_enabled("premium-feature", user_id="user-123"):
+    show_premium_feature()
 
-# Shutdown at app exit
-shutdown_client()
+# Multivariate flag
+variant = get_flag("checkout-experiment", user_id="user-123", default="control")
 ```
 
-#### Environment Variables
+See [manor/feature_flags/README.md](manor/feature_flags/README.md) for full documentation.
+
+### MCP Auth (`manor.mcp_auth`)
+
+JWT authentication for MCP servers.
+
+```python
+from manor.mcp_auth import get_auth_headers
+import httpx
+
+# Get authentication headers
+headers = get_auth_headers()
+
+# Make authenticated request
+response = httpx.get("http://service-search/mcp/tools", headers=headers)
+```
+
+See [manor/mcp_auth/README.md](manor/mcp_auth/README.md) for full documentation.
+
+## Environment Variables
+
+### Logger
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LAUNCHDARKLY_SDK_KEY` | LaunchDarkly SDK key | (required) |
-| `LAUNCHDARKLY_OFFLINE` | Run in offline mode | `false` |
-| `DD_ENV` / `ENVIRONMENT` | Environment name | `dev` |
+| `LOG_LEVEL` | Log level | `INFO` |
+| `DD_API_KEY` | Datadog API key | (none) |
+| `DD_SITE` | Datadog site | `us5.datadoghq.com` |
+| `DD_SERVICE` | Service name | `app` |
+| `DD_ENV` | Environment | `dev` |
+
+### Feature Flags
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `POSTHOG_API_KEY` | PostHog API key | (required) |
+| `POSTHOG_PERSONAL_API_KEY` | Enables local evaluation | (optional) |
+| `POSTHOG_HOST` | PostHog host | `https://us.i.posthog.com` |
+
+### MCP Auth
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MCP_AUTH_SECRET` | Shared secret | (required) |
+| `MCP_AUTH_ISSUER` | Token issuer | `manor-internal` |
+| `MCP_AUTH_AUDIENCE` | Token audience | `service-search-mcp` |
 
 ## Development
 
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
+# Install dependencies
+uv sync --all-groups
 
 # Run tests
-pytest
+uv run pytest -v
 
 # Run linter
-ruff check .
+uv run ruff check .
 
 # Format code
-ruff format .
+uv run ruff format .
 ```
 
 ## Publishing
 
-Packages are automatically published to GitHub Packages when a tag is pushed:
+Packages are automatically published as GitHub Releases on push to `main`:
 
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
+- Version format: `1.TIMESTAMP.BUILD_NUMBER`
+- Example: `1.202502041530.42`
+- Releases: https://github.com/manor-tech/service-python-modules/releases

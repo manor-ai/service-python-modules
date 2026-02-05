@@ -10,7 +10,7 @@ env:
   MAJOR_VERSION: "1"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -20,11 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v3
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Install dependencies
         run: uv sync --all-groups
@@ -32,8 +32,8 @@ jobs:
       - name: Run tests
         run: uv run pytest -v
 
-  build-and-publish:
-    name: 📦 Build & Publish
+  build-and-release:
+    name: 📦 Build & Release
     runs-on: ubuntu-latest
     needs: test
     outputs:
@@ -41,11 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v3
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Generate version
         id: version
@@ -65,35 +65,62 @@ jobs:
       - name: Build package
         run: uv build
 
-      - name: Publish to GitHub Packages
+      - name: List built artifacts
+        run: ls -la dist/
+
+      - name: Create GitHub Release
         env:
-          UV_PUBLISH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          uv publish \
-            --publish-url https://upload.pypi.pkg.github.com/manor-tech/ \
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Create release with artifacts
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes "## Installation
+
+          \`\`\`bash
+          uv add manor --find-links https://github.com/manor-tech/service-python-modules/releases/download/v${VERSION}/
+          \`\`\`
+
+          Or add to pyproject.toml:
+
+          \`\`\`toml
+          [tool.uv]
+          find-links = [\"https://github.com/manor-tech/service-python-modules/releases/download/v${VERSION}/\"]
+
+          [project]
+          dependencies = [\"manor\"]
+          \`\`\`
+          " \
             dist/*
 
       - name: Summary
         run: |
-          echo "## 📦 Package Published" >> $GITHUB_STEP_SUMMARY
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "## 📦 Package Released" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release:** https://github.com/${{ github.repository }}/releases/tag/v${VERSION}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Install with uv" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "uv add manor --index https://pypi.pkg.github.com/manor-tech/" >> $GITHUB_STEP_SUMMARY
+          echo "uv add manor --find-links https://github.com/manor-tech/service-python-modules/releases/download/v${VERSION}/" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   notify_success:
     name: 💬 Notify Success
     runs-on: ubuntu-latest
-    needs: [test, build-and-publish]
+    needs: [test, build-and-release]
     if: success()
     steps:
       - env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          MSG="✅ manor package published\nVersion: ${{ needs.build-and-publish.outputs.version }}"
+          VERSION="${{ needs.build-and-release.outputs.version }}"
+          MSG="✅ manor package released\nVersion: ${VERSION}\nRelease: https://github.com/${{ github.repository }}/releases/tag/v${VERSION}"
           curl -X POST -H 'Content-type: application/json' \
             --data "{\"text\":\"$MSG\"}" \
             "$SLACK_WEBHOOK_URL" || true
@@ -101,13 +128,13 @@ jobs:
   notify_failure:
     name: 💬 Notify Failure
     runs-on: ubuntu-latest
-    needs: [test, build-and-publish]
+    needs: [test, build-and-release]
     if: failure()
     steps:
       - env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          MSG="❌ manor package publish failed\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG="❌ manor package release failed\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -X POST -H 'Content-type: application/json' \
             --data "{\"text\":\"$MSG\"}" \
             "$SLACK_WEBHOOK_URL" || true
