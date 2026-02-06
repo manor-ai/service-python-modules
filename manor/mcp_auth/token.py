@@ -22,7 +22,7 @@ Environment Variables:
     MCP_AUTH_SUBJECT: Token subject (default: SERVICE_NAME or unknown-service)
     MCP_AUTH_TTL_SECONDS: Token TTL in seconds (default: 3600)
     MCP_AUTH_MARGIN_SECONDS: Refresh margin in seconds (default: 30)
-    MCP_AUTH_FEATURE_FLAG: Feature flag key (default: manor_search_enable_api_token_v1)
+    MCP_AUTH_FEATURE_FLAG: Feature flag key (default: manor_search_enable_mcp_api_token)
 """
 
 import os
@@ -109,7 +109,7 @@ class MCPTokenProvider:
             "margin_seconds": _safe_int(os.getenv("MCP_AUTH_MARGIN_SECONDS"), 30),
             "feature_flag": os.getenv(
                 "MCP_AUTH_FEATURE_FLAG",
-                "manor_search_enable_api_token_v1",
+                "manor_search_enable_mcp_api_token",
             ),
         }
 

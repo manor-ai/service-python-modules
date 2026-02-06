@@ -206,7 +206,7 @@ if is_enabled():
 | `MCP_AUTH_AUDIENCE` | Token audience | `service-search-mcp` |
 | `MCP_AUTH_SUBJECT` | Token subject | `SERVICE_NAME` |
 | `MCP_AUTH_TTL_SECONDS` | Token TTL | `3600` |
-| `MCP_AUTH_FEATURE_FLAG` | Feature flag | `manor_search_enable_api_token_v1` |
+| `MCP_AUTH_FEATURE_FLAG` | Feature flag | `manor_search_enable_mcp_api_token` |
 
 ## Complete Example: pyproject.toml
 

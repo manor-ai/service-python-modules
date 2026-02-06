@@ -41,7 +41,7 @@ All configuration is done via environment variables:
 | `MCP_AUTH_SUBJECT` | Token subject claim | `SERVICE_NAME` |
 | `MCP_AUTH_TTL_SECONDS` | Token TTL in seconds | `3600` (1 hour) |
 | `MCP_AUTH_MARGIN_SECONDS` | Refresh margin | `30` |
-| `MCP_AUTH_FEATURE_FLAG` | Feature flag key | `manor_search_enable_api_token_v1` |
+| `MCP_AUTH_FEATURE_FLAG` | Feature flag key | `manor_search_enable_mcp_api_token` |
 
 ## Usage
 
@@ -108,7 +108,7 @@ headers = MCPTokenProvider.get_auth_headers()
 │      ▼                                                                   │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
 │  │  1. Check Feature Flag                                           │   │
-│  │     - Is 'manor_search_enable_api_token_v1' enabled?             │   │
+│  │     - Is 'manor_search_enable_mcp_api_token' enabled?             │   │
 │  │     - If NO → return None                                        │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │      │ YES                                                              │
@@ -200,7 +200,7 @@ The module integrates with `manor.feature_flags` to control token generation:
 
 ```python
 # Token is only generated if this flag is enabled
-MCP_AUTH_FEATURE_FLAG = "manor_search_enable_api_token_v1"
+MCP_AUTH_FEATURE_FLAG = "manor_search_enable_mcp_api_token"
 ```
 
 This allows:

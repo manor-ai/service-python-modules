@@ -24,7 +24,7 @@ Environment Variables:
     MCP_AUTH_SUBJECT: Token subject (default: SERVICE_NAME)
     MCP_AUTH_TTL_SECONDS: Token TTL in seconds (default: 3600)
     MCP_AUTH_MARGIN_SECONDS: Refresh margin (default: 30)
-    MCP_AUTH_FEATURE_FLAG: Feature flag key (default: manor_search_enable_api_token_v1)
+    MCP_AUTH_FEATURE_FLAG: Feature flag key (default: manor_search_enable_mcp_api_token)
 """
 
 from .token import MCPTokenProvider, get_auth_headers, get_token, is_enabled
