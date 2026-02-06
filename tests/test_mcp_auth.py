@@ -19,8 +19,10 @@ import pytest
 def reset_singleton():
     from manor.mcp_auth.token import MCPTokenProvider
     MCPTokenProvider._instance = None
+    MCPTokenProvider._init_failed = False
     yield
     MCPTokenProvider._instance = None
+    MCPTokenProvider._init_failed = False
 
 
 # Mock feature flag to return True
@@ -378,3 +380,68 @@ class TestJWTValidation:
                     algorithms=["HS256"],
                     audience="wrong-audience",
                 )
+
+
+class TestNeverRaises:
+    """Test that the module NEVER raises exceptions."""
+    
+    def test_get_token_never_raises_with_invalid_env(self):
+        from manor.mcp_auth import get_token
+        
+        # Invalid TTL value
+        env = {
+            "MCP_AUTH_SECRET": "test-secret",
+            "MCP_AUTH_TTL_SECONDS": "not-a-number",
+        }
+        
+        with mock.patch.dict(os.environ, env, clear=True):
+            # Should not raise, should return None or valid token
+            result = get_token()
+            assert result is None or isinstance(result, str)
+    
+    def test_get_auth_headers_never_raises(self):
+        from manor.mcp_auth import get_auth_headers
+        
+        # No config at all
+        with mock.patch.dict(os.environ, {}, clear=True):
+            result = get_auth_headers()
+            assert isinstance(result, dict)
+    
+    def test_is_enabled_never_raises(self):
+        from manor.mcp_auth import is_enabled
+        
+        # No config at all
+        with mock.patch.dict(os.environ, {}, clear=True):
+            result = is_enabled()
+            assert result is False
+    
+    def test_get_token_returns_none_when_jwt_encode_fails(self, mock_feature_flag):
+        from manor.mcp_auth import get_token
+        from manor.mcp_auth.token import MCPTokenProvider
+        
+        env = {"MCP_AUTH_SECRET": "test-secret"}
+        
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch("jwt.encode", side_effect=Exception("JWT error")):
+                # Reset singleton to force re-init
+                MCPTokenProvider._instance = None
+                result = get_token()
+                assert result is None
+    
+    def test_get_auth_headers_returns_empty_on_any_error(self, mock_feature_flag):
+        from manor.mcp_auth import get_auth_headers
+        from manor.mcp_auth.token import MCPTokenProvider
+        
+        # Force get_token to raise
+        with mock.patch.object(MCPTokenProvider, "get_token", side_effect=Exception("Unexpected")):
+            result = get_auth_headers()
+            assert result == {}
+    
+    def test_is_enabled_returns_false_on_any_error(self):
+        from manor.mcp_auth import is_enabled
+        from manor.mcp_auth.token import MCPTokenProvider
+        
+        # Force get_instance to raise
+        with mock.patch.object(MCPTokenProvider, "get_instance", side_effect=Exception("Unexpected")):
+            result = is_enabled()
+            assert result is False

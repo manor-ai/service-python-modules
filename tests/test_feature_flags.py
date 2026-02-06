@@ -335,11 +335,12 @@ class TestFeatureFlagChecker:
             )
             
             assert result is True
+            # service_env is automatically added by _merge_properties
             mock_posthog.feature_enabled.assert_called_with(
                 "test-flag",
                 "user-123",
                 groups=None,
-                person_properties=None,
+                person_properties={"service_env": "unknown"},
                 group_properties=None,
             )
         finally:
