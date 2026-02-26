@@ -47,6 +47,12 @@ except ImportError:
     Posthog = None
     POSTHOG_AVAILABLE = False
 
+# PostHog context support (v7+)
+try:
+    from posthog.contexts import get_context_distinct_id as _get_context_distinct_id
+except ImportError:
+    _get_context_distinct_id = lambda: None  # noqa: E731
+
 
 # =============================================================================
 # STEP 2: CONFIGURATION FROM ENVIRONMENT
@@ -494,7 +500,8 @@ class FeatureFlagChecker:
             )
             return default
 
-        distinct_id = user_id or DEFAULT_DISTINCT_ID
+        # explicit user_id > PostHog context > service-level default
+        distinct_id = user_id or _get_context_distinct_id() or DEFAULT_DISTINCT_ID
         merged_properties = _merge_properties(properties)
 
         try:
@@ -550,7 +557,8 @@ class FeatureFlagChecker:
             )
             return False
 
-        distinct_id = user_id or DEFAULT_DISTINCT_ID
+        # explicit user_id > PostHog context > service-level default
+        distinct_id = user_id or _get_context_distinct_id() or DEFAULT_DISTINCT_ID
         merged_properties = _merge_properties(properties)
 
         try:
