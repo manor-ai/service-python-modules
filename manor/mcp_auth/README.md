@@ -8,7 +8,7 @@ This module provides secure authentication between Manor services and MCP server
 
 - Signed with a shared secret (HS256)
 - Cached and refreshed automatically
-- Controlled by a feature flag for gradual rollout
+- Generated whenever `MCP_AUTH_SECRET` is configured
 
 ## Installation
 
@@ -41,7 +41,6 @@ All configuration is done via environment variables:
 | `MCP_AUTH_SUBJECT` | Token subject claim | `SERVICE_NAME` |
 | `MCP_AUTH_TTL_SECONDS` | Token TTL in seconds | `3600` (1 hour) |
 | `MCP_AUTH_MARGIN_SECONDS` | Refresh margin | `30` |
-| `MCP_AUTH_FEATURE_FLAG` | Feature flag key | `manor_search_enable_mcp_api_token` |
 
 ## Usage
 
@@ -107,21 +106,14 @@ headers = MCPTokenProvider.get_auth_headers()
 │      │                                                                   │
 │      ▼                                                                   │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  1. Check Feature Flag                                           │   │
-│  │     - Is 'manor_search_enable_mcp_api_token' enabled?             │   │
-│  │     - If NO → return None                                        │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│      │ YES                                                              │
-│      ▼                                                                   │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  2. Check Configuration                                          │   │
+│  │  1. Check Configuration                                          │   │
 │  │     - Is MCP_AUTH_SECRET set?                                    │   │
 │  │     - If NO → return None                                        │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │      │ YES                                                              │
 │      ▼                                                                   │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  3. Check Cache                                                  │   │
+│  │  2. Check Cache                                                  │   │
 │  │     - Is cached token still valid?                               │   │
 │  │     - Valid = now < (token_exp - margin_seconds)                 │   │
 │  │     - If YES → return cached token                               │   │
@@ -129,7 +121,7 @@ headers = MCPTokenProvider.get_auth_headers()
 │      │ NO (expired or no cache)                                         │
 │      ▼                                                                   │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  4. Generate New Token                                           │   │
+│  │  3. Generate New Token                                           │   │
 │  │     - Create JWT with claims (iss, aud, sub, iat, exp)           │   │
 │  │     - Sign with HS256 using MCP_AUTH_SECRET                      │   │
 │  │     - Cache token and expiry                                     │   │
@@ -194,20 +186,6 @@ def verify_mcp_token(authorization: str = Header(None)) -> dict:
         raise HTTPException(401, f"Invalid token: {e}")
 ```
 
-## Feature Flag Integration
-
-The module integrates with `manor.feature_flags` to control token generation:
-
-```python
-# Token is only generated if this flag is enabled
-MCP_AUTH_FEATURE_FLAG = "manor_search_enable_mcp_api_token"
-```
-
-This allows:
-- Gradual rollout of authentication
-- Easy disable in case of issues
-- Per-user/per-service targeting
-
 ## Migration from Local Implementation
 
 If migrating from a local `mcp_token.py`:
@@ -259,7 +237,6 @@ The `MCPTokenProvider` is thread-safe:
 
 All errors are handled gracefully:
 - If PyJWT not installed → returns None
-- If feature flag disabled → returns None
 - If secret not configured → returns None
 - If token generation fails → returns None
 
