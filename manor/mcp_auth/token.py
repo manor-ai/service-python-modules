@@ -15,6 +15,10 @@ Usage:
     headers = get_auth_headers()
     response = httpx.get(url, headers=headers)
 
+A token is generated whenever MCP_AUTH_SECRET is configured. (Token generation
+used to be gated behind the `manor_search_enable_mcp_api_token` feature flag,
+which is now fully rolled out and removed.)
+
 Environment Variables:
     MCP_AUTH_SECRET: Shared secret for signing tokens (required)
     MCP_AUTH_ISSUER: Token issuer (default: manor-internal)
@@ -22,7 +26,6 @@ Environment Variables:
     MCP_AUTH_SUBJECT: Token subject (default: SERVICE_NAME or unknown-service)
     MCP_AUTH_TTL_SECONDS: Token TTL in seconds (default: 3600)
     MCP_AUTH_MARGIN_SECONDS: Refresh margin in seconds (default: 30)
-    MCP_AUTH_FEATURE_FLAG: Feature flag key (default: manor_search_enable_mcp_api_token)
 """
 
 import os
@@ -47,17 +50,12 @@ def _safe_int(value, default):
         return default
 
 
-def _get_service_env():
-    """Get service environment from ENVIRONMENT or DD_ENV, default to 'unknown'."""
-    return os.getenv("ENVIRONMENT") or os.getenv("DD_ENV") or "unknown"
-
-
 class MCPTokenProvider:
     """
     Singleton provider for MCP authentication tokens.
 
-    Generates JWT tokens, caches them, and refreshes before expiry.
-    Only generates tokens when feature flag is enabled.
+    Generates JWT tokens, caches them, and refreshes before expiry. Tokens are
+    generated whenever MCP_AUTH_SECRET is configured.
 
     IMPORTANT: This class is designed to NEVER raise exceptions.
     All errors are handled gracefully and result in returning None/empty values.
@@ -107,23 +105,7 @@ class MCPTokenProvider:
             ),
             "ttl_seconds": _safe_int(os.getenv("MCP_AUTH_TTL_SECONDS"), 3600),
             "margin_seconds": _safe_int(os.getenv("MCP_AUTH_MARGIN_SECONDS"), 30),
-            "feature_flag": os.getenv(
-                "MCP_AUTH_FEATURE_FLAG",
-                "manor_search_enable_mcp_api_token",
-            ),
         }
-
-    def _is_feature_enabled(self, feature_flag):
-        """Check if the MCP auth feature flag is enabled. Never raises."""
-        try:
-            from manor.feature_flags import is_enabled
-            return is_enabled(feature_flag, properties={"service_env": _get_service_env()})
-        except ImportError:
-            # Feature flags module not available, assume disabled (safe default)
-            return False
-        except Exception:
-            # Error checking flag, assume disabled for safety
-            return False
 
     def _generate_token(self, config):
         """Generate a new JWT token. Never raises."""
@@ -167,10 +149,6 @@ class MCPTokenProvider:
         """Get a valid token, generating a new one if needed. Never raises."""
         try:
             config = self._get_config()
-
-            # Check feature flag first
-            if not self._is_feature_enabled(config["feature_flag"]):
-                return None
 
             # Check if secret is configured
             if not config["secret"]:
@@ -256,9 +234,6 @@ def is_enabled():
             return False
 
         config = instance._get_config()
-
-        if not instance._is_feature_enabled(config["feature_flag"]):
-            return False
 
         if not config["secret"]:
             return False
