@@ -149,7 +149,26 @@ def add_datadog_trace_context(
     except Exception:
         # Never fail logging because of trace injection
         pass
-    
+
+    return event_dict
+
+
+def add_otel_trace_context(logger, method_name, event_dict):
+    """structlog processor: stamp the active OTel trace_id/span_id onto the log.
+
+    Emits `trace_id` (32 hex) + `span_id` (16 hex) — the fields the Grafana Loki
+    datasource's derivedField regex `"trace_id":"([a-f0-9]+)"` links to Tempo.
+    No-op when there is no active/valid span. Soft: never breaks logging.
+    """
+    try:
+        from opentelemetry import trace
+
+        ctx = trace.get_current_span().get_span_context()
+        if ctx and ctx.is_valid:
+            event_dict["trace_id"] = format(ctx.trace_id, "032x")
+            event_dict["span_id"] = format(ctx.span_id, "016x")
+    except Exception:
+        pass
     return event_dict
 
 
@@ -559,6 +578,18 @@ class HealthCheckLogFilter(logging.Filter):
         return True
 
 
+def install_access_log_filters():
+    """Attach the /health filter to the access loggers. Idempotent; cheap and
+    fork-safe (no HTTP client, no threads) — so it runs at import, NOT gated
+    behind the heavyweight lazy configure_logging(). Covers uvicorn AND gunicorn
+    access loggers (services run gunicorn+UvicornWorker)."""
+    _filter = HealthCheckLogFilter()
+    for name in ("uvicorn.access", "gunicorn.access"):
+        lg = logging.getLogger(name)
+        if not any(isinstance(f, HealthCheckLogFilter) for f in lg.filters):
+            lg.addFilter(_filter)
+
+
 # =============================================================================
 # STEP 7: MAIN CONFIGURATION FUNCTION
 # =============================================================================
@@ -699,9 +730,8 @@ def configure_logging(
         
         # ----- CONFIGURE THIRD-PARTY LOGGERS -----
         
-        # Filter health checks from uvicorn access logs
-        uvicorn_access_logger = logging.getLogger("uvicorn.access")
-        uvicorn_access_logger.addFilter(HealthCheckLogFilter())
+        # Filter health checks from uvicorn/gunicorn access logs
+        install_access_log_filters()
         
         # Reduce httpx noise (only warnings and above)
         httpx_logger = logging.getLogger("httpx")
@@ -730,6 +760,7 @@ def configure_logging(
                 structlog.processors.TimeStamper(fmt="iso"),
                 inject_request_context,
                 add_datadog_trace_context,
+                add_otel_trace_context,
                 structlog.processors.StackInfoRenderer(),
                 structlog.processors.format_exc_info,
                 structlog.processors.UnicodeDecoder(),

@@ -48,12 +48,15 @@ from .llm_instrumentation import (
     instrument_llm_call,
     trace_llm_pipeline,
 )
-from .structured_logger import configure_logging, logger
+from .structured_logger import configure_logging, install_access_log_filters, logger
+
+install_access_log_filters()
 
 __all__ = [
     # Main logger
     "logger",
     "configure_logging",
+    "install_access_log_filters",
     # Request context (for distributed tracing)
     "RequestContextMiddleware",
     "get_request_id",
