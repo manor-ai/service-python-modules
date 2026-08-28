@@ -663,6 +663,18 @@ def test_otel_trace_context_processor_adds_ids():
     assert "span_id" in out and len(out["span_id"]) == 16
 
 
+def test_health_filter_installed_on_import():
+    import logging
+
+    import manor.logger  # noqa: F401 — import must install the filters
+
+    from manor.logger.structured_logger import HealthCheckLogFilter
+
+    for name in ("uvicorn.access", "gunicorn.access"):
+        lg = logging.getLogger(name)
+        assert any(isinstance(f, HealthCheckLogFilter) for f in lg.filters), name
+
+
 class TestHealthCheckFilter:
     """Test health check log filter."""
 
