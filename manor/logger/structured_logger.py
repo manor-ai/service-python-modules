@@ -149,7 +149,26 @@ def add_datadog_trace_context(
     except Exception:
         # Never fail logging because of trace injection
         pass
-    
+
+    return event_dict
+
+
+def add_otel_trace_context(logger, method_name, event_dict):
+    """structlog processor: stamp the active OTel trace_id/span_id onto the log.
+
+    Emits `trace_id` (32 hex) + `span_id` (16 hex) — the fields the Grafana Loki
+    datasource's derivedField regex `"trace_id":"([a-f0-9]+)"` links to Tempo.
+    No-op when there is no active/valid span. Soft: never breaks logging.
+    """
+    try:
+        from opentelemetry import trace
+
+        ctx = trace.get_current_span().get_span_context()
+        if ctx and ctx.is_valid:
+            event_dict["trace_id"] = format(ctx.trace_id, "032x")
+            event_dict["span_id"] = format(ctx.span_id, "016x")
+    except Exception:
+        pass
     return event_dict
 
 
@@ -730,6 +749,7 @@ def configure_logging(
                 structlog.processors.TimeStamper(fmt="iso"),
                 inject_request_context,
                 add_datadog_trace_context,
+                add_otel_trace_context,
                 structlog.processors.StackInfoRenderer(),
                 structlog.processors.format_exc_info,
                 structlog.processors.UnicodeDecoder(),

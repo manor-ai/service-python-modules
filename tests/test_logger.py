@@ -649,6 +649,20 @@ class TestDatadogHandler:
 # =============================================================================
 
 
+def test_otel_trace_context_processor_adds_ids():
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from manor.logger.structured_logger import add_otel_trace_context
+
+    trace.set_tracer_provider(TracerProvider())
+    tracer = trace.get_tracer("test")
+    with tracer.start_as_current_span("s"):
+        out = add_otel_trace_context(None, "info", {"event": "hi"})
+    assert "trace_id" in out and len(out["trace_id"]) == 32
+    assert "span_id" in out and len(out["span_id"]) == 16
+
+
 class TestHealthCheckFilter:
     """Test health check log filter."""
 
