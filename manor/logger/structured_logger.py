@@ -736,6 +736,10 @@ def configure_logging(
         # Reduce httpx noise (only warnings and above)
         httpx_logger = logging.getLogger("httpx")
         httpx_logger.setLevel(logging.WARNING)
+
+        # LiteLLM logs full rerank queries + document payloads at INFO (with ANSI
+        # colour codes) — heavy, low-signal noise in Loki. Keep only warnings and above.
+        logging.getLogger("LiteLLM").setLevel(logging.WARNING)
         
         # ----- CONFIGURE STRUCTLOG -----
         # structlog provides structured logging with key-value pairs
@@ -744,7 +748,7 @@ def configure_logging(
         # 1. add_log_level: Add "level" field (info, error, etc.)
         # 2. TimeStamper: Add "timestamp" field (ISO format)
         # 3. inject_request_context: Add request_id and extra context
-        # 4. add_datadog_trace_context: Add dd.trace_id, dd.span_id
+        # 4. add_otel_trace_context: Add trace_id, span_id from the active OTel span
         # 5. StackInfoRenderer: Add stack trace if requested
         # 6. format_exc_info: Format exception info
         # 7. UnicodeDecoder: Ensure strings are unicode
@@ -759,7 +763,6 @@ def configure_logging(
                 structlog.processors.add_log_level,
                 structlog.processors.TimeStamper(fmt="iso"),
                 inject_request_context,
-                add_datadog_trace_context,
                 add_otel_trace_context,
                 structlog.processors.StackInfoRenderer(),
                 structlog.processors.format_exc_info,
