@@ -102,13 +102,15 @@ def test_enabled_is_case_and_whitespace_insensitive(monkeypatch):
     assert len(_otlp_handlers()) == 1
 
 
-def test_service_name_prefers_otel_service_name_over_dd(monkeypatch):
-    """OTLP logs must carry OTEL_SERVICE_NAME (== the traces' service.name), NOT the
-    DD_SERVICE that configure_logging passes as service_name. DD_* is Datadog-legacy
-    and on its way out; OTEL_SERVICE_NAME is the source of truth."""
+def test_no_arg_resolves_otel_service_name_over_dd(monkeypatch):
+    """With no explicit arg (exactly how configure_logging now calls it), the OTLP
+    logs resource resolves OTEL_SERVICE_NAME — the traces' service.name — NOT the
+    Datadog-legacy DD_SERVICE. This keeps the Python services under `service-…`
+    (not `manor-service-…`) so the dashboards' `service-…` filter matches them."""
     monkeypatch.setenv("OTEL_LOGS_EXPORTER", "otlp")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
     monkeypatch.setenv("OTEL_SERVICE_NAME", "service-agents")
+    monkeypatch.setenv("DD_SERVICE", "manor-service-agents")
 
     from opentelemetry.sdk.resources import Resource
 
@@ -121,9 +123,7 @@ def test_service_name_prefers_otel_service_name_over_dd(monkeypatch):
 
     monkeypatch.setattr(Resource, "create", spy)
     with patch(_EXPORTER_PATH, MagicMock()):
-        # configure_logging passes DD_SERVICE (e.g. "manor-service-agents") here — it
-        # must lose to OTEL_SERVICE_NAME.
-        assert telemetry.configure_otlp_logging(service_name="manor-service-agents") is True
+        assert telemetry.configure_otlp_logging() is True
 
     assert captured.get("service.name") == "service-agents"
 
@@ -143,4 +143,6 @@ def test_configure_logging_invokes_helper(monkeypatch):
     with patch("manor.telemetry.configure_otlp_logging", called):
         sl.configure_logging(service="wiring-test", env="cicd")
 
-    assert called.called
+    # Must be called with NO service_name — feeding the DD-derived service (here
+    # "wiring-test") would shadow OTEL_SERVICE_NAME in the OTLP logs resource.
+    called.assert_called_once_with()
