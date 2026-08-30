@@ -102,6 +102,32 @@ def test_enabled_is_case_and_whitespace_insensitive(monkeypatch):
     assert len(_otlp_handlers()) == 1
 
 
+def test_service_name_prefers_otel_service_name_over_dd(monkeypatch):
+    """OTLP logs must carry OTEL_SERVICE_NAME (== the traces' service.name), NOT the
+    DD_SERVICE that configure_logging passes as service_name. DD_* is Datadog-legacy
+    and on its way out; OTEL_SERVICE_NAME is the source of truth."""
+    monkeypatch.setenv("OTEL_LOGS_EXPORTER", "otlp")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "service-agents")
+
+    from opentelemetry.sdk.resources import Resource
+
+    captured = {}
+    real_create = Resource.create
+
+    def spy(attributes=None, *args, **kwargs):
+        captured.update(attributes or {})
+        return real_create(attributes, *args, **kwargs)
+
+    monkeypatch.setattr(Resource, "create", spy)
+    with patch(_EXPORTER_PATH, MagicMock()):
+        # configure_logging passes DD_SERVICE (e.g. "manor-service-agents") here — it
+        # must lose to OTEL_SERVICE_NAME.
+        assert telemetry.configure_otlp_logging(service_name="manor-service-agents") is True
+
+    assert captured.get("service.name") == "service-agents"
+
+
 def test_configure_logging_invokes_helper(monkeypatch):
     """configure_logging() must call the helper (wired in after basicConfig)."""
     import structlog
