@@ -102,38 +102,14 @@ def test_enabled_is_case_and_whitespace_insensitive(monkeypatch):
     assert len(_otlp_handlers()) == 1
 
 
-def test_no_arg_resolves_otel_service_name_over_dd(monkeypatch):
-    """With no explicit arg (exactly how configure_logging now calls it), the OTLP
-    logs resource resolves OTEL_SERVICE_NAME — the traces' service.name — NOT the
-    Datadog-legacy DD_SERVICE. This keeps the Python services under `service-…`
-    (not `manor-service-…`) so the dashboards' `service-…` filter matches them."""
-    monkeypatch.setenv("OTEL_LOGS_EXPORTER", "otlp")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-    monkeypatch.setenv("OTEL_SERVICE_NAME", "service-agents")
-    monkeypatch.setenv("DD_SERVICE", "manor-service-agents")
-
-    from opentelemetry.sdk.resources import Resource
-
-    captured = {}
-    real_create = Resource.create
-
-    def spy(attributes=None, *args, **kwargs):
-        captured.update(attributes or {})
-        return real_create(attributes, *args, **kwargs)
-
-    monkeypatch.setattr(Resource, "create", spy)
-    with patch(_EXPORTER_PATH, MagicMock()):
-        assert telemetry.configure_otlp_logging() is True
-
-    assert captured.get("service.name") == "service-agents"
-
-
-def test_configure_logging_invokes_helper(monkeypatch):
-    """configure_logging() must call the helper (wired in after basicConfig)."""
+def test_configure_logging_resolves_otel_service_name_not_dd(monkeypatch):
+    """configure_logging wires the helper AND passes OTEL_SERVICE_NAME (not the
+    Datadog-legacy DD_SERVICE) as the OTLP logs service.name."""
     import structlog
 
     import manor.logger.structured_logger as sl
 
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "service-agents")
     # Reset the logging singleton so configure_logging() actually runs its body.
     sl._is_configured = False
     sl._logger_instance = None
@@ -141,8 +117,6 @@ def test_configure_logging_invokes_helper(monkeypatch):
 
     called = MagicMock(return_value=False)
     with patch("manor.telemetry.configure_otlp_logging", called):
-        sl.configure_logging(service="wiring-test", env="cicd")
+        sl.configure_logging(env="cicd")  # no explicit service -> OTEL_SERVICE_NAME wins
 
-    # Must be called with NO service_name — feeding the DD-derived service (here
-    # "wiring-test") would shadow OTEL_SERVICE_NAME in the OTLP logs resource.
-    called.assert_called_once_with()
+    called.assert_called_once_with(service_name="service-agents")

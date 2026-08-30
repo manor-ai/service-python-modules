@@ -737,12 +737,8 @@ def configure_logging(
         try:
             from manor.telemetry import configure_otlp_logging
 
-            # Do NOT pass resolved_service here: it falls back to DD_SERVICE, the
-            # Datadog-legacy name (e.g. "manor-service-agents"), which would land the
-            # OTLP logs under a service.name the traces don't use and the dashboards'
-            # `service-…` filter excludes. Passing nothing lets configure_otlp_logging
-            # resolve OTEL_SERVICE_NAME — the same source the traces use.
-            configure_otlp_logging()
+            # Prefer OTEL_SERVICE_NAME over the Datadog-legacy DD_SERVICE (drop it in the DD cleanup).
+            configure_otlp_logging(service_name=service or os.getenv("OTEL_SERVICE_NAME") or DD_SERVICE)
         except Exception:  # noqa: BLE001 — telemetry must never break app logging
             pass
 

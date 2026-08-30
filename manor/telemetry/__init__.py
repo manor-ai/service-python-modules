@@ -148,10 +148,6 @@ def configure_otlp_logging(*, service_name: str | None = None) -> bool:
             from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
             from opentelemetry.sdk.resources import Resource
 
-            # Same precedence as configure_telemetry: an explicit arg wins, else the
-            # OTel-standard OTEL_SERVICE_NAME, then the Datadog-legacy DD_SERVICE as a
-            # last resort. Callers should NOT pass the DD service here (configure_logging
-            # deliberately passes nothing) so OTLP logs share the traces' service.name.
             name = (
                 service_name
                 or os.getenv("OTEL_SERVICE_NAME")
