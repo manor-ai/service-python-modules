@@ -727,7 +727,20 @@ def configure_logging(
             format="%(message)s",  # structlog handles formatting
             handlers=[queue_handler],
         )
-        
+
+        # ----- OPTIONAL: OTLP LOG EXPORT (dev-only, opt-in) -----
+        # Runs AFTER basicConfig so the OTel LoggingHandler lands on the configured
+        # root logger. STRICT NO-OP unless OTEL_LOGS_EXPORTER == "otlp" AND
+        # OTEL_EXPORTER_OTLP_ENDPOINT is set — prod never sets OTEL_LOGS_EXPORTER,
+        # so the prod FireLens->Loki path is untouched. Defensive: never breaks
+        # app logging.
+        try:
+            from manor.telemetry import configure_otlp_logging
+
+            configure_otlp_logging(service_name=resolved_service)
+        except Exception:  # noqa: BLE001 — telemetry must never break app logging
+            pass
+
         # ----- CONFIGURE THIRD-PARTY LOGGERS -----
         
         # Filter health checks from uvicorn/gunicorn access logs
