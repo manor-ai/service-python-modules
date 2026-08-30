@@ -651,7 +651,7 @@ def configure_logging(
         
         # ----- RESOLVE CONFIGURATION -----
         # Use provided values or fall back to environment variables
-        resolved_service = service if service is not None else DD_SERVICE
+        resolved_service = service or os.getenv("OTEL_SERVICE_NAME") or DD_SERVICE
         resolved_env = env if env is not None else DD_ENV
         resolved_api_key = api_key if api_key is not None else DD_API_KEY
         resolved_site = site if site is not None else DD_SITE

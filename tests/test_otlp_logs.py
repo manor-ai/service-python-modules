@@ -102,12 +102,14 @@ def test_enabled_is_case_and_whitespace_insensitive(monkeypatch):
     assert len(_otlp_handlers()) == 1
 
 
-def test_configure_logging_invokes_helper(monkeypatch):
-    """configure_logging() must call the helper (wired in after basicConfig)."""
+def test_configure_logging_resolves_otel_service_name_not_dd(monkeypatch):
+    """configure_logging wires the helper AND passes OTEL_SERVICE_NAME (not the
+    Datadog-legacy DD_SERVICE) as the OTLP logs service.name."""
     import structlog
 
     import manor.logger.structured_logger as sl
 
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "service-agents")
     # Reset the logging singleton so configure_logging() actually runs its body.
     sl._is_configured = False
     sl._logger_instance = None
@@ -115,6 +117,6 @@ def test_configure_logging_invokes_helper(monkeypatch):
 
     called = MagicMock(return_value=False)
     with patch("manor.telemetry.configure_otlp_logging", called):
-        sl.configure_logging(service="wiring-test", env="cicd")
+        sl.configure_logging(env="cicd")  # no explicit service -> OTEL_SERVICE_NAME wins
 
-    assert called.called
+    called.assert_called_once_with(service_name="service-agents")
