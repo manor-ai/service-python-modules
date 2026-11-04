@@ -33,6 +33,7 @@ def configure_telemetry(app=None, *, service_name: str | None = None, engine=Non
 
     Returns True if tracing was configured, False if skipped (no endpoint).
     - app: FastAPI/Starlette app to instrument for server spans (optional).
+      One server span per request; no per-chunk `http send`/`http receive` spans.
     - service_name: resource `service.name`; falls back to OTEL_SERVICE_NAME,
       then DD_SERVICE, then "manor-service".
     - engine: a SQLAlchemy Engine (or AsyncEngine.sync_engine) to instrument
@@ -86,7 +87,10 @@ def configure_telemetry(app=None, *, service_name: str | None = None, engine=Non
         if app is not None:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-            FastAPIInstrumentor.instrument_app(app)
+            # No span per ASGI send/receive event: a streaming response would
+            # otherwise get one `http send` span per chunk. The server span
+            # still covers the whole request, streaming included.
+            FastAPIInstrumentor.instrument_app(app, exclude_spans=["send", "receive"])
 
         if engine is not None:
             from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
